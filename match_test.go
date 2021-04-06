@@ -26,7 +26,7 @@ func TestFibonacci(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("%d", tc.n), func(t *testing.T) {
-			fn := fib(tc.n)
+			fn := Fibonacci(tc.n)
 			if fn != tc.fn {
 				t.Errorf("unexpected")
 			}
@@ -34,29 +34,9 @@ func TestFibonacci(t *testing.T) {
 	}
 }
 
-func fib(n int) int {
-	return match.
-		Match(n).
-		When(0).Return(0).
-		When(1).Return(1).
-		When(match.Any).Do(func(n int) int { return fib(n-1) + fib(n-2) }).
-		Int()
-}
+var fib = match.
+	When(0).Return(0).
+	When(1).Return(1).
+	When(match.Any).Return(func(m *match.Match, n int) int { return m.Int(n-1) + m.Int(n-2) })
 
-// func TestReverseList(t *testing.T) {
-// 	testCases := []struct {
-// 		input  []int
-// 		output []int
-// 	}{
-// 		{input: []int{0, 1, 2}, output: []int{2, 1, 0}},
-// 	}
-//
-// 	for _, tc := range testCases {
-// 		t.Run(fmt.Sprintf("%d", tc.n), func(t *testing.T) {
-// 			output := reverse(tc.input)
-// 			if !reflect.DeepEqual(output, tc.output) {
-// 				t.Errorf("unexpected")
-// 			}
-// 		})
-// 	}
-// }
+func Fibonacci(n int) int { return fib.Int(n) }
