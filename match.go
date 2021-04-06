@@ -1,137 +1,139 @@
 package match
 
-import (
-	"errors"
-	"reflect"
-)
+import "reflect"
 
-func When(args ...interface{}) *when {
-	w := &when{args: args}
-	m := &Match{order: []*when{w}}
-	w.match = m
-	return w
+type Match []Case
+
+type Case struct {
+	When when
+	Do   interface{}
 }
 
-type Match struct {
-	order []*when
+func (m Match) Int(args ...interface{}) int {
+	return 0
 }
 
-func (m *Match) When(args ...interface{}) *when {
-	w := &when{
-		match: m,
-		args:  args,
-	}
-
-	m.order = append(m.order, w)
-
-	return w
+func (m Match) String(args ...interface{}) string {
+	return ""
 }
 
-func (m *Match) Int(args ...interface{}) int {
-	res, err := m.result(args...)
-	if err != nil {
-		panic(err)
-	}
-	intval, err := res.Int()
-	if err != nil {
-		panic(err)
-	}
-	return intval
+func (m Match) Slice(args ...interface{}) *SliceType {
+	return NewSliceType([]interface{}{})
 }
 
-func (m *Match) result(args ...interface{}) (Result, error) {
-	for _, when := range m.order {
-		pass, err := when.pass(args...)
-		if err != nil {
-			return Result{nil}, err
-		}
-		if !pass {
-			continue
-		}
-		return when.result(args...)
-	}
-
-	return Result{nil}, errors.New("not matched")
+type handle struct {
+	kind     handleKind
+	argn     *int
+	children []interface{}
 }
 
-type Result struct {
-	val interface{}
-}
+type handleFunc func(args ...interface{}) handle
 
-func result(val interface{}) Result {
-	return Result{val: val}
-}
-
-func (r Result) Int() (int, error) {
-	val, ok := r.val.(int)
-	if !ok {
-		return 0, errors.New("placeholder")
-	}
-	return val, nil
-}
-
-type when struct {
-	match *Match
-	args  []interface{}
-	ret   interface{}
-}
-
-func (w *when) pass(args ...interface{}) (bool, error) {
-	if len(w.args) != len(args) {
-		return false, nil
-	}
-
-	for i := range w.args {
-		switch {
-		case w.args[i] == Any, w.args[i] == args[i]:
-			continue
-		}
-		return false, nil
-	}
-
-	return true, nil
-}
-
-func (w *when) Return(ret interface{}) *Match {
-	w.ret = ret
-	return w.match
-}
-
-func (w *when) result(args ...interface{}) (Result, error) {
-	ret := reflect.TypeOf(w.ret)
-
-	if ret.Kind() != reflect.Func {
-		return Result{w.ret}, nil
-	}
-
-	out := reflect.ValueOf(w.ret).Call([]reflect.Value{
-		reflect.ValueOf(w.match),
-		reflect.ValueOf(args[0]),
-	})
-
-	if len(out) > 2 {
-		return Result{nil}, errors.New("more than two outputs")
-	}
-
-	if len(out) == 2 {
-		errI := out[1].Interface()
-		err, ok := errI.(error)
-		if !ok {
-			return Result{nil}, errors.New("second output must be an error")
-		}
-		return Result{out[0].Interface()}, err
-	}
-
-	if len(out) == 1 {
-		return Result{out[0].Interface()}, nil
-	}
-
-	return Result{nil}, errors.New("no outputs")
-}
-
-type handle int
+type handleKind int
 
 const (
-	Invalid handle = iota
-	Any
+	hkInvalid handleKind = iota
+	hkEmpty
+	hkString
+	hkSlice
+	hkHead
+	hkTail
+	hkAny
 )
+
+func Any(args ...interface{}) (ret handle) {
+	switch len(args) {
+	case 0:
+		ret.kind = hkAny
+		return
+	case 1:
+		if argn, ok := args[0].(int); ok {
+			ret.argn = &argn
+			ret.kind = hkAny
+		}
+	}
+
+	return
+}
+
+func Empty() handle {
+	return handle{kind: hkEmpty}
+}
+
+func String(args ...interface{}) (ret handle) {
+	switch len(args) {
+	case 0:
+		ret.kind = hkString
+		return
+	case 1:
+		if argn, ok := args[0].(int); ok {
+			ret.argn = &argn
+			ret.kind = hkString
+		}
+	}
+
+	return
+}
+
+func Slice(args ...interface{}) (ret handle) {
+	switch len(args) {
+	case 0:
+		ret.kind = hkSlice
+		return
+	case 1:
+		if argn, ok := args[0].(int); ok {
+			ret.argn = &argn
+			ret.kind = hkSlice
+		}
+	}
+
+	return
+}
+
+func Head(argn, size int) (ret handle) {
+	ret.kind = hkHead
+
+	if argn > 0 {
+		ret.argn = &argn
+	}
+
+	return
+}
+
+func Tail(argn, size int) (ret handle) {
+	ret.kind = hkTail
+
+	if argn > 0 {
+		ret.argn = &argn
+	}
+
+	return
+}
+
+func When(args ...interface{}) when {
+	all := make([]interface{}, len(args))
+	for i := range args {
+		all[i] = args[i]
+	}
+	return all
+}
+
+type when []interface{}
+
+type SliceType struct {
+	wrapped interface{}
+}
+
+func NewSliceType(wrapped interface{}) *SliceType {
+	if reflect.TypeOf(wrapped).Kind() != reflect.Slice {
+		panic("not slice")
+	}
+
+	return &SliceType{wrapped}
+}
+
+func (sl *SliceType) Append(el interface{}) *SliceType {
+	ret := reflect.Append(reflect.ValueOf(sl.wrapped), reflect.ValueOf(el))
+	sl.wrapped = ret.Interface()
+	return sl
+}
