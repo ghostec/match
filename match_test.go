@@ -2,14 +2,46 @@ package match_test
 
 import (
 	"fmt"
+	"testing"
 
 	ma "github.com/ghostec/match"
 )
+
+func TestFibonacci(t *testing.T) {
+	testCases := []struct {
+		n  int
+		fn int
+	}{
+		{0, 0},
+		{1, 1},
+		{2, 1},
+		{3, 2},
+		{4, 3},
+		{5, 5},
+		{6, 8},
+		{7, 13},
+		{8, 21},
+		{9, 34},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%d", tc.n), func(t *testing.T) {
+			fn := Fibonacci(tc.n)
+			if fn != tc.fn {
+				t.Errorf("unexpected fib(%d). Got: %d, Expected: %d", tc.n, fn, tc.fn)
+			}
+		})
+	}
+}
 
 var fibonacci = ma.Match{
 	{ma.When(0), 0},
 	{ma.When(1), 1},
 	{ma.When(ma.Any(0)), func(m *ma.Match, n int) int { return m.Int(n-1) + m.Int(n-2) }},
+}
+
+func Fibonacci(n int) (fn int) {
+	return fibonacci.Int(n)
 }
 
 var join = ma.Match{
