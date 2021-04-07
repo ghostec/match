@@ -2,6 +2,8 @@ package match
 
 import (
 	"reflect"
+
+	ha "github.com/ghostec/match/handles"
 )
 
 func When(args ...interface{}) when {
@@ -19,37 +21,27 @@ func (w when) match(args []interface{}) (ok bool, wargs []interface{}) {
 		return false, nil
 	}
 
-	var matchedArgs []Arg
+	var matchedArgs []ha.Arg
 
 	for i := range w {
-		h, isHandle := w[i].(handle)
-
-		wiValue := reflect.ValueOf(w[i])
-
-		isAnyFunc := wiValue.Kind() == reflect.Func && reflect.ValueOf(Any).Pointer() == wiValue.Pointer()
-		isEmptyFunc := wiValue.Kind() == reflect.Func && reflect.ValueOf(Empty).Pointer() == wiValue.Pointer()
-		isSliceFunc := wiValue.Kind() == reflect.Func && reflect.ValueOf(Slice).Pointer() == wiValue.Pointer()
-		isStringFunc := wiValue.Kind() == reflect.Func && reflect.ValueOf(String).Pointer() == wiValue.Pointer()
-
-		switch {
-		case isEmptyFunc:
-			h = handle{kind: hkEmpty}
-		case isSliceFunc:
-			h = handle{kind: hkSlice}
-		case isStringFunc:
-			h = handle{kind: hkString}
-		case isAnyFunc, reflect.DeepEqual(w[i], args[i]):
+		if reflect.DeepEqual(w[i], args[i]) {
 			continue
-		case !isHandle:
+		}
+
+		m, isMatcher := w[i].(interface {
+			Match(interface{}) ([]ha.Arg, error)
+		})
+
+		if !isMatcher {
 			return false, nil
 		}
 
-		hargs, err := h.Match(args[i])
+		wiargs, err := m.Match(args[i])
 		if err != nil {
 			return false, nil
 		}
 
-		matchedArgs = append(matchedArgs, hargs...)
+		matchedArgs = append(matchedArgs, wiargs...)
 	}
 
 	wargs = make([]interface{}, len(matchedArgs))
