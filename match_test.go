@@ -38,8 +38,8 @@ func TestFibonacci(t *testing.T) {
 }
 
 var fibonacci = ma.Match{
-	{ma.When(0), 0},
-	{ma.When(1), 1},
+	{ma.When(ha.Eq(0)), 0},
+	{ma.When(ha.Eq(1)), 1},
 	{ma.When(ha.Any(0)), func(m ma.Match, n int) int { return m.Int(n-1) + m.Int(n-2) }},
 }
 
