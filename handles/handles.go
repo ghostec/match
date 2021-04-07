@@ -3,6 +3,8 @@ package match
 import (
 	"errors"
 	"reflect"
+
+	ty "github.com/ghostec/match/types"
 )
 
 type hAny struct {
@@ -46,6 +48,10 @@ func Empty() hEmpty {
 }
 
 func (h hEmpty) Match(arg interface{}) (ret []Arg, err error) {
+	if sl, ok := arg.(*ty.Slice); ok {
+		arg = sl.Get()
+	}
+
 	argValue := reflect.ValueOf(arg)
 
 	switch argValue.Kind() {
@@ -82,7 +88,7 @@ func String(args ...interface{}) (ret hString) {
 
 func (h hString) Match(arg interface{}) (ret []Arg, err error) {
 	if _, ok := arg.(string); !ok {
-		return nil, errors.New("arg isn't string")
+		return nil, errors.New("handles: arg isn't string")
 	}
 
 	if h.argn == nil {
@@ -142,10 +148,16 @@ func Slice(args ...interface{}) (ret hSlice) {
 // TODO: write this as a ma.Match expression
 // maybe Arg needs to go on ma instead of ha
 func (h hSlice) Match(arg interface{}) (ret []Arg, err error) {
+	if sl, ok := arg.(*ty.Slice); ok {
+		arg = sl.Get()
+	}
+
 	argValue := reflect.ValueOf(arg)
 
-	if argValue.Kind() != reflect.Slice {
-		return nil, errors.New("arg isn't slice")
+	switch argValue.Kind() {
+	case reflect.Array, reflect.Slice:
+	default:
+		return nil, errors.New("handles: arg isn't slice")
 	}
 
 	if h.argn == nil && len(h.children) == 0 {
@@ -167,8 +179,9 @@ func (h hSlice) Match(arg interface{}) (ret []Arg, err error) {
 		switch child := h.children[i].(type) {
 		case hSlice:
 			start, end := -1, -1
+			l := argValue.Len()
 
-			if i == 0 {
+			if l > 0 && i == 0 {
 				next := h.children[1]
 				tl, ok := next.(hTail)
 				if !ok {
@@ -176,7 +189,7 @@ func (h hSlice) Match(arg interface{}) (ret []Arg, err error) {
 				}
 
 				start, end = 0, argValue.Len()-tl.size
-			} else {
+			} else if l > 0 {
 				prev := h.children[0]
 				hd, ok := prev.(hHead)
 				if !ok {
@@ -186,10 +199,17 @@ func (h hSlice) Match(arg interface{}) (ret []Arg, err error) {
 				start, end = hd.size, argValue.Len()
 			}
 
-			ret = append(ret, Arg{
-				N:     *child.argn,
-				Value: argValue.Slice(start, end).Interface(),
-			})
+			var value interface{}
+			if start != -1 && end != -1 {
+				value = argValue.Slice(start, end).Interface()
+			}
+
+			if child.argn != nil {
+				ret = append(ret, Arg{
+					N:     *child.argn,
+					Value: value,
+				})
+			}
 
 		case hHead, hTail:
 			matcher, _ := child.(interface {
@@ -202,6 +222,9 @@ func (h hSlice) Match(arg interface{}) (ret []Arg, err error) {
 			}
 
 			ret = append(ret, hargs...)
+
+		default:
+			return nil, errors.New("handles: invalid child for slice")
 		}
 	}
 
@@ -241,14 +264,20 @@ func Tail(argn, size int) (ret hTail) {
 func (h hHead) Match(arg interface{}) (ret []Arg, err error) {
 	argValue := reflect.ValueOf(arg)
 
-	if argValue.Kind() != reflect.Slice {
-		return nil, errors.New("arg isn't slice")
+	switch argValue.Kind() {
+	case reflect.Array, reflect.Slice:
+	default:
+		return nil, errors.New("handles: arg isn't slice")
 	}
 
 	var value interface{}
 
+	if argValue.Len() == 0 {
+		return nil, errors.New("handles: empty list can't have a head")
+	}
+
 	if h.size == 1 {
-		value = argValue.Index(0)
+		value = argValue.Index(0).Interface()
 	} else {
 		value = argValue.Slice(0, h.size).Interface()
 	}
@@ -261,14 +290,20 @@ func (h hHead) Match(arg interface{}) (ret []Arg, err error) {
 func (h hTail) Match(arg interface{}) (ret []Arg, err error) {
 	argValue := reflect.ValueOf(arg)
 
-	if argValue.Kind() != reflect.Slice {
-		return nil, errors.New("arg isn't slice")
+	switch argValue.Kind() {
+	case reflect.Array, reflect.Slice:
+	default:
+		return nil, errors.New("handles: arg isn't slice")
+	}
+
+	if argValue.Len() == 0 {
+		return nil, errors.New("handles: empty list can't have a tail")
 	}
 
 	var value interface{}
 
 	if h.size == 1 {
-		value = argValue.Index(argValue.Len() - 1)
+		value = argValue.Index(argValue.Len() - 1).Interface()
 	} else {
 		l := argValue.Len()
 		value = argValue.Slice(l-h.size, l).Interface()

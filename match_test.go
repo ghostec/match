@@ -7,6 +7,7 @@ import (
 
 	ma "github.com/ghostec/match"
 	ha "github.com/ghostec/match/handles"
+	ty "github.com/ghostec/match/types"
 )
 
 func TestFibonacci(t *testing.T) {
@@ -66,7 +67,7 @@ func TestJoin(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.output, func(t *testing.T) {
-			output := Join(tc.input, tc.by)
+			output := Join(ty.NewSlice(tc.input), tc.by)
 			if output != tc.output {
 				t.Errorf("unexpected output. Got: %s, Expected: %s", output, tc.output)
 			}
@@ -76,28 +77,27 @@ func TestJoin(t *testing.T) {
 
 var join = ma.Match{
 	{
+		// 0 - [], "by", "acc" -> "acc"
 		ma.When(ha.Empty(), ha.String(), ha.String(0)),
 		func(joined string) string { return joined },
 	},
 	{
-		ma.When(ha.Slice(0), ha.String(1)),
-		func(m ma.Match, list interface{}, by string) string { return m.String(list, by, "") },
-	},
-	{
-		ma.When(ha.Slice(ha.Head(0, 1), ha.Slice(1)), ha.String(2), ha.Empty()),
-		func(m ma.Match, head, tail interface{}, by string) string {
-			return m.String(tail, by, fmt.Sprintf("%v", head))
+		// 1 - [head|...rest], "by" -> [...], "by", "acc" // {0, 2}
+		ma.When(ha.Slice(ha.Head(0, 1), ha.Slice(1)), ha.String(2)),
+		func(m ma.Match, head *ty.Any, tail *ty.Slice, by string) string {
+			return m.String(tail, by, fmt.Sprintf("%v", head.Get()))
 		},
 	},
 	{
+		// 2 - [head|...rest], "by", "acc" -> [...], "by", "acc" // {0, 2}
 		ma.When(ha.Slice(ha.Head(0, 1), ha.Slice(1)), ha.String(2), ha.String(3)),
-		func(m ma.Match, head, tail interface{}, by, acc string) string {
-			return m.String(tail, by, fmt.Sprintf("%s%s%v", acc, by, head))
+		func(m ma.Match, head *ty.Any, tail *ty.Slice, by, acc string) string {
+			return m.String(tail, by, fmt.Sprintf("%s%s%v", acc, by, head.Get()))
 		},
 	},
 }
 
-func Join(slice interface{}, by string) string {
+func Join(slice *ty.Slice, by string) string {
 	return join.String(slice, by)
 }
 
@@ -113,9 +113,9 @@ func TestReverse(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		t.Run(Join(tc.input, ", "), func(t *testing.T) {
-			output := Reverse(tc.input)
-			if reflect.DeepEqual(output, tc.output) {
+		t.Run(Join(ty.NewSlice(tc.input), ", "), func(t *testing.T) {
+			output := Reverse(ty.NewSlice(tc.input))
+			if !reflect.DeepEqual(output.Get(), tc.output) {
 				t.Errorf("unexpected output. Got: %s, Expected: %s", output, tc.output)
 			}
 		})
@@ -125,20 +125,22 @@ func TestReverse(t *testing.T) {
 var reverse = ma.Match{
 	{
 		ma.When(ha.Empty(), ha.Slice(0)),
-		func(reversed *ma.SliceType) *ma.SliceType { return reversed },
+		func(reversed *ty.Slice) *ty.Slice { return reversed },
 	},
 	{
 		ma.When(ha.Slice(ha.Slice(0), ha.Tail(1, 1))),
-		func(m ma.Match, head *ma.SliceType, tail interface{}) *ma.SliceType { return m.Slice(head, tail) },
+		func(m ma.Match, head *ty.Slice, tail *ty.Any) *ty.Slice {
+			return m.Slice(head, ty.NewSlice(tail.Get()))
+		},
 	},
 	{
 		ma.When(ha.Slice(ha.Slice(0), ha.Tail(1, 1)), ha.Slice(2)),
-		func(m ma.Match, head *ma.SliceType, tail interface{}, acc *ma.SliceType) *ma.SliceType {
-			return m.Slice(head, acc.Append(tail))
+		func(m ma.Match, head *ty.Slice, tail *ty.Any, acc *ty.Slice) *ty.Slice {
+			return m.Slice(head, acc.Append(tail.Get()))
 		},
 	},
 }
 
-func Reverse(list interface{}) interface{} {
-	return reverse.Slice(list).Get()
+func Reverse(list *ty.Slice) *ty.Slice {
+	return reverse.Slice(list)
 }

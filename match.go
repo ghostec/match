@@ -3,6 +3,8 @@ package match
 import (
 	"errors"
 	"reflect"
+
+	ty "github.com/ghostec/match/types"
 )
 
 type Match []Case
@@ -36,8 +38,16 @@ func (m Match) String(args ...interface{}) string {
 	return val
 }
 
-func (m Match) Slice(args ...interface{}) *SliceType {
-	return NewSliceType([]interface{}{})
+func (m Match) Slice(args ...interface{}) *ty.Slice {
+	res, err := m.Result(args...)
+	if err != nil {
+		panic(err)
+	}
+	val, ok := res.(*ty.Slice)
+	if !ok {
+		panic("not slice")
+	}
+	return val
 }
 
 func (m Match) Result(args ...interface{}) (interface{}, error) {
@@ -65,7 +75,22 @@ func (m Match) Result(args ...interface{}) (interface{}, error) {
 	}
 
 	for i := range c.Args {
-		input[rshift+i] = reflect.ValueOf(c.Args[i])
+		tSlice := reflect.TypeOf(ty.NewSlice(nil))
+		tAny := reflect.TypeOf(ty.NewAny(nil))
+
+		value := interface{}(c.Args[i])
+		switch dotype.In(i + rshift) {
+		case tSlice:
+			if reflect.TypeOf(c.Args[i]) != tSlice {
+				value = ty.NewSlice(c.Args[i])
+			}
+		case tAny:
+			if reflect.TypeOf(c.Args[i]) != tAny {
+				value = ty.NewAny(c.Args[i])
+			}
+		}
+
+		input[rshift+i] = reflect.ValueOf(value)
 	}
 
 	out := dovalue.Call(input)
